@@ -26,7 +26,7 @@
     "@cubejs-backend/shared": "^0.36.8",
     "@testcontainers/kafka": "~10.13.0",
     "dedent": "^0.7.0",
-    "node-fetch": "^2.6.7",
+    "node-fetch": "^3.2.10",
     "testcontainers": "^10.13.0"
   },
   "devDependencies": {
