@@ -170,7 +170,7 @@ export class FireboltDriver extends BaseDriver implements DriverInterface {
 
   public async testConnection(): Promise<void> {
     try {
-      await this.query('select 1');
+      await this.internalQuery('select 1');
     } catch (error) {
       console.log(error);
       throw new Error('Unable to connect');
@@ -203,6 +203,15 @@ export class FireboltDriver extends BaseDriver implements DriverInterface {
     parameters?: unknown[]
   ): Promise<R[]> {
     const response = await this.queryResponse(query, parameters);
+    return response.data as R[];
+  }
+
+  private async internalQuery<R = Record<string, unknown>>(
+    query: string,
+    parameters?: unknown[]
+  ): Promise<R[]> {
+    // Internal queries have special settings to avoid affecting the engine state
+    const response = await this.queryResponse(query, parameters, true, true);
     return response.data as R[];
   }
 
@@ -264,15 +273,20 @@ export class FireboltDriver extends BaseDriver implements DriverInterface {
     }
   }
 
-  private async queryResponse(query: string, parameters?: unknown[], retry = true): Promise<{
+  private async queryResponse(query: string, parameters?: unknown[], retry = true, internal = false): Promise<{
     data: Row[];
     meta: Meta[];
   }> {
     try {
       const connection = await this.getConnection();
-
+      const settings = {
+        output_format: OutputFormat.JSON,
+        // Internal queries are used for connection verification
+        // and should not affect the engine state
+        ...(internal && { auto_start_stop_control: 'ignore' }),
+      };
       const statement = await connection.execute(query, {
-        settings: { output_format: OutputFormat.JSON },
+        settings,
         parameters,
         response: { hydrateRow: this.hydrateRow }
       });
@@ -281,11 +295,11 @@ export class FireboltDriver extends BaseDriver implements DriverInterface {
     } catch (error) {
       if ((<any>error).status === 401 && retry) {
         this.connection = null;
-        return this.queryResponse(query, parameters, false);
+        return this.queryResponse(query, parameters, false, internal);
       }
       if ((<any>error).status === 404 && retry) {
         await this.ensureEngineRunning();
-        return this.queryResponse(query, parameters, false);
+        return this.queryResponse(query, parameters, false, internal);
       }
       throw error;
     }
